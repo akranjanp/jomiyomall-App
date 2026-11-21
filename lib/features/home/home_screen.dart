@@ -440,9 +440,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ),
                                   ],
                                 ),
-                              );
-                            },
-                          );
+                              ),
+                            );
+                          },
+                        );
                         }).toList(),
                       ),
                       const SizedBox(height: 8),
