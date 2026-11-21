@@ -362,15 +362,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         items: banners.map((banner) {
                           return Builder(
                             builder: (BuildContext context) {
-                              return ClipRRect(
+                              return InkWell(
                                 borderRadius: BorderRadius.circular(14),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    CustomCachedImage(
-                                      imageUrl: banner['image']?.toString() ?? '',
-                                      fit: BoxFit.cover,
-                                    ),
+                                onTap: () {
+                                  final type = banner['action_type']?.toString();
+                                  final val = banner['action_value']?.toString();
+                                  if (type == 'category' && val != null && val.isNotEmpty) {
+                                    context.push('/products?title=${Uri.encodeComponent(banner['title']?.toString() ?? 'Collection')}');
+                                  } else if (type == 'product' && val != null && val.isNotEmpty) {
+                                    final pId = int.tryParse(val);
+                                    if (pId != null && pId > 0) {
+                                      context.push('/product/$pId');
+                                    }
+                                  }
+                                },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      CustomCachedImage(
+                                        imageUrl: banner['image']?.toString() ?? '',
+                                        fit: BoxFit.cover,
+                                      ),
                                     Container(
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(

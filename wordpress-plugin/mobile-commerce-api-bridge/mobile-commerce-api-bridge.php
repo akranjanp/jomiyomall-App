@@ -24,6 +24,7 @@ class Jomiyo_Mobile_API_Bridge {
         add_action('rest_api_init', [$this, 'register_routes']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'register_settings']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
     }
 
     public function register_routes() {
@@ -125,6 +126,9 @@ class Jomiyo_Mobile_API_Bridge {
             ['id' => 'best_sellers', 'title' => 'Best Sellers', 'type' => 'best_sellers', 'limit' => 8],
         ];
 
+        $whatsapp = get_option('jomiyo_mobile_whatsapp', '+919910403750');
+        $phone = get_option('jomiyo_mobile_support_phone', '+91 9910403750');
+
         return rest_ensure_response([
             'status' => 'success',
             'app_name' => 'Jomiyo Mall',
@@ -132,8 +136,8 @@ class Jomiyo_Mobile_API_Bridge {
             'currency' => get_woocommerce_currency(),
             'currency_symbol' => html_entity_decode(get_woocommerce_currency_symbol()),
             'support_email' => get_option('admin_email'),
-            'support_phone' => '+91 9876543210',
-            'whatsapp_number' => '+919876543210',
+            'support_phone' => !empty($phone) ? $phone : '+91 9910403750',
+            'whatsapp_number' => !empty($whatsapp) ? $whatsapp : '+919910403750',
             'min_version' => '1.0.0',
             'latest_version' => '1.0.0',
             'maintenance_mode' => false,
@@ -501,35 +505,233 @@ class Jomiyo_Mobile_API_Bridge {
         return true;
     }
 
+    public function enqueue_admin_scripts($hook) {
+        if (strpos($hook, 'mobile-commerce-api') !== false) {
+            wp_enqueue_media();
+        }
+    }
+
     public function add_admin_menu() {
-        add_options_page('Mobile Commerce API', 'Mobile App API', 'manage_options', 'mobile-commerce-api', [$this, 'render_admin_page']);
+        add_menu_page(
+            'Jomiyo Mobile App',
+            'Mobile App API',
+            'manage_options',
+            'mobile-commerce-api',
+            [$this, 'render_admin_page'],
+            'dashicons-smartphone',
+            58
+        );
     }
 
     public function register_settings() {
         register_setting('jomiyo_mobile_settings', 'woocommerce_razorpay_key_id');
         register_setting('jomiyo_mobile_settings', 'woocommerce_razorpay_key_secret');
+        register_setting('jomiyo_mobile_settings', 'jomiyo_mobile_whatsapp');
+        register_setting('jomiyo_mobile_settings', 'jomiyo_mobile_support_phone');
     }
 
     public function render_admin_page() {
+        // Handle Form Submission
+        if (isset($_POST['jomiyo_save_settings']) && check_admin_referer('jomiyo_mobile_save_action', 'jomiyo_mobile_nonce')) {
+            $submitted_banners = [];
+            if (isset($_POST['banners']) && is_array($_POST['banners'])) {
+                foreach ($_POST['banners'] as $idx => $b) {
+                    $img = esc_url_raw($b['image'] ?? '');
+                    if (!empty($img)) {
+                        $submitted_banners[] = [
+                            'id' => $idx + 1,
+                            'title' => sanitize_text_field($b['title'] ?? ''),
+                            'subtitle' => sanitize_text_field($b['subtitle'] ?? ''),
+                            'image' => $img,
+                            'action_type' => sanitize_text_field($b['action_type'] ?? 'category'),
+                            'action_value' => sanitize_text_field($b['action_value'] ?? ''),
+                        ];
+                    }
+                }
+            }
+
+            if (!empty($submitted_banners)) {
+                update_option('jomiyo_mobile_banners', $submitted_banners);
+            }
+
+            update_option('woocommerce_razorpay_key_id', sanitize_text_field($_POST['woocommerce_razorpay_key_id'] ?? ''));
+            update_option('woocommerce_razorpay_key_secret', sanitize_text_field($_POST['woocommerce_razorpay_key_secret'] ?? ''));
+            update_option('jomiyo_mobile_whatsapp', sanitize_text_field($_POST['jomiyo_mobile_whatsapp'] ?? ''));
+            update_option('jomiyo_mobile_support_phone', sanitize_text_field($_POST['jomiyo_mobile_support_phone'] ?? ''));
+
+            echo '<div class="notice notice-success is-dismissible" style="margin-top:15px;"><p><strong>Success:</strong> Mobile App settings and Home Screen Banners saved successfully! Mobile App will now display your updated banners.</p></div>';
+        }
+
+        $banners = get_option('jomiyo_mobile_banners', [
+            [
+                'id' => 1,
+                'title' => 'Big Festive Sale',
+                'subtitle' => 'Up to 60% OFF on Top Brands',
+                'image' => 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200',
+                'action_type' => 'category',
+                'action_value' => 'sale',
+            ],
+            [
+                'id' => 2,
+                'title' => 'Trendy Fashion Collection',
+                'subtitle' => 'Explore the Latest Arrivals',
+                'image' => 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1200',
+                'action_type' => 'category',
+                'action_value' => 'fashion',
+            ],
+            [
+                'id' => 3,
+                'title' => 'Premium Footwear & Accessories',
+                'subtitle' => 'Elevate Your Style',
+                'image' => 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=1200',
+                'action_type' => 'category',
+                'action_value' => 'shoes',
+            ],
+        ]);
+
+        $razorpay_key_id = get_option('woocommerce_razorpay_key_id', 'rzp_test_SDo2WKBNQXDk5Y');
+        $razorpay_key_secret = get_option('woocommerce_razorpay_key_secret', '');
+        $whatsapp = get_option('jomiyo_mobile_whatsapp', '+919910403750');
+        $phone = get_option('jomiyo_mobile_support_phone', '+91 9910403750');
         ?>
-        <div class="wrap">
-            <h1>Mobile Commerce API Bridge Settings</h1>
-            <p>Configure backend settings for Jomiyo Mall Mobile Application.</p>
-            <form method="post" action="options.php">
-                <?php settings_fields('jomiyo_mobile_settings'); ?>
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">Razorpay Key ID</th>
-                        <td><input type="text" name="woocommerce_razorpay_key_id" value="<?php echo esc_attr(get_option('woocommerce_razorpay_key_id')); ?>" class="regular-text" /></td>
-                    </tr>
-                    <tr>
-                        <th scope="row">Razorpay Key Secret</th>
-                        <td><input type="password" name="woocommerce_razorpay_key_secret" value="<?php echo esc_attr(get_option('woocommerce_razorpay_key_secret')); ?>" class="regular-text" /></td>
-                    </tr>
-                </table>
-                <?php submit_button(); ?>
+        <div class="wrap" style="max-width: 960px;">
+            <h1 style="display:flex; align-items:center; gap:10px;">
+                <span class="dashicons dashicons-smartphone" style="font-size:32px; width:32px; height:32px; color:#0037AB;"></span>
+                Jomiyo Mobile App Manager
+            </h1>
+            <p style="font-size:14px; color:#555;">Manage dynamic Home Screen Banners, promotional offers, Razorpay verification, and customer support directly for the Jomiyo Mall mobile app.</p>
+
+            <form method="post" action="">
+                <?php wp_nonce_field('jomiyo_mobile_save_action', 'jomiyo_mobile_nonce'); ?>
+
+                <!-- BANNERS CARD -->
+                <div style="background:#fff; border:1px solid #ccd0d4; border-radius:8px; padding:20px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <h2 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px; color:#0037AB;">
+                        🖼️ Home Screen Hero Banners
+                    </h2>
+                    <p style="color:#666; font-size:13px;">Add, replace, or update banners shown on the Mobile App Home Screen carousel. You can upload new images or pick from your existing Media Library.</p>
+
+                    <div id="jomiyo-banners-container">
+                        <?php 
+                        for ($i = 0; $i < 5; $i++): 
+                            $b = isset($banners[$i]) ? $banners[$i] : ['title' => '', 'subtitle' => '', 'image' => '', 'action_type' => 'category', 'action_value' => ''];
+                        ?>
+                            <div class="jomiyo-banner-card" style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:16px; margin-bottom:16px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                    <h3 style="margin:0; font-size:14px; color:#111827;">Slide #<?php echo ($i + 1); ?></h3>
+                                    <?php if (!empty($b['image'])): ?>
+                                        <span style="font-size:11px; background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:10px; font-weight:600;">Active</span>
+                                    <?php else: ?>
+                                        <span style="font-size:11px; background:#f3f4f6; color:#6b7280; padding:2px 8px; border-radius:10px;">Optional</span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div style="display:grid; grid-template-columns: 180px 1fr; gap:16px; align-items:start;">
+                                    <!-- Image Preview & Uploader -->
+                                    <div style="text-align:center;">
+                                        <div style="width:100%; height:95px; background:#e5e7eb; border-radius:6px; overflow:hidden; display:flex; align-items:center; justify-content:center; margin-bottom:8px; border:1px solid #d1d5db;">
+                                            <img id="preview_banner_<?php echo $i; ?>" src="<?php echo esc_url($b['image']); ?>" style="width:100%; height:100%; object-fit:cover; display:<?php echo !empty($b['image']) ? 'block' : 'none'; ?>;" alt="Preview" />
+                                            <span id="placeholder_banner_<?php echo $i; ?>" style="color:#9ca3af; font-size:12px; display:<?php echo empty($b['image']) ? 'block' : 'none'; ?>;">No Image</span>
+                                        </div>
+                                        <input type="hidden" name="banners[<?php echo $i; ?>][image]" id="input_banner_<?php echo $i; ?>" value="<?php echo esc_attr($b['image']); ?>" />
+                                        <button type="button" class="button jomiyo-upload-btn" data-target="<?php echo $i; ?>" style="font-size:12px; width:100%;">
+                                            📁 <?php echo empty($b['image']) ? 'Upload Image' : 'Change Image'; ?>
+                                        </button>
+                                    </div>
+
+                                    <!-- Banner Fields -->
+                                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                                        <div>
+                                            <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Banner Title</label>
+                                            <input type="text" name="banners[<?php echo $i; ?>][title]" value="<?php echo esc_attr($b['title']); ?>" placeholder="e.g. Mega Summer Sale" style="width:100%; font-size:13px;" />
+                                        </div>
+                                        <div>
+                                            <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Subtitle / Offer</label>
+                                            <input type="text" name="banners[<?php echo $i; ?>][subtitle]" value="<?php echo esc_attr($b['subtitle']); ?>" placeholder="e.g. Up to 50% OFF" style="width:100%; font-size:13px;" />
+                                        </div>
+                                        <div>
+                                            <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Click Action</label>
+                                            <select name="banners[<?php echo $i; ?>][action_type]" style="width:100%; font-size:13px;">
+                                                <option value="category" <?php selected($b['action_type'] ?? '', 'category'); ?>>Open Category</option>
+                                                <option value="product" <?php selected($b['action_type'] ?? '', 'product'); ?>>Open Specific Product</option>
+                                                <option value="none" <?php selected($b['action_type'] ?? '', 'none'); ?>>None (Banner Only)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style="display:block; font-size:12px; font-weight:600; margin-bottom:4px;">Category Slug or Product ID</label>
+                                            <input type="text" name="banners[<?php echo $i; ?>][action_value]" value="<?php echo esc_attr($b['action_value'] ?? ''); ?>" placeholder="e.g. men, women, or 212" style="width:100%; font-size:13px;" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endfor; ?>
+                    </div>
+                </div>
+
+                <!-- INTEGRATION & SUPPORT CARD -->
+                <div style="background:#fff; border:1px solid #ccd0d4; border-radius:8px; padding:20px; margin-bottom:24px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <h2 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px; color:#0037AB;">
+                        ⚙️ Payments & Support Settings
+                    </h2>
+
+                    <table class="form-table" style="margin-top:0;">
+                        <tr>
+                            <th scope="row"><label for="razorpay_key">Razorpay Key ID</label></th>
+                            <td>
+                                <input type="text" name="woocommerce_razorpay_key_id" id="razorpay_key" value="<?php echo esc_attr($razorpay_key_id); ?>" class="regular-text" />
+                                <p class="description">Live Razorpay Key ID used for online payments in the app.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="razorpay_secret">Razorpay Key Secret</label></th>
+                            <td>
+                                <input type="password" name="woocommerce_razorpay_key_secret" id="razorpay_secret" value="<?php echo esc_attr($razorpay_key_secret); ?>" class="regular-text" />
+                                <p class="description">Used on the server to securely verify payment signatures and auto-update order statuses.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="whatsapp_number">Customer Support WhatsApp</label></th>
+                            <td>
+                                <input type="text" name="jomiyo_mobile_whatsapp" id="whatsapp_number" value="<?php echo esc_attr($whatsapp); ?>" class="regular-text" placeholder="+919910403750" />
+                                <p class="description">Number opened when customers tap the WhatsApp Support button in the app.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="support_phone">Toll-Free / Support Phone</label></th>
+                            <td>
+                                <input type="text" name="jomiyo_mobile_support_phone" id="support_phone" value="<?php echo esc_attr($phone); ?>" class="regular-text" placeholder="+91 9910403750" />
+                                <p class="description">Phone number opened when customers tap Call Support.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <p class="submit">
+                    <button type="submit" name="jomiyo_save_settings" class="button button-primary button-hero" style="background:#0037AB; border-color:#002275;">
+                        💾 Save Mobile App Changes
+                    </button>
+                </p>
             </form>
         </div>
+
+        <script>
+        jQuery(document).ready(function($){
+            $('.jomiyo-upload-btn').click(function(e) {
+                e.preventDefault();
+                var targetIdx = $(this).data('target');
+                var customUploader = wp.media({
+                    title: 'Select Mobile App Banner Image',
+                    button: { text: 'Use this Image' },
+                    multiple: false
+                }).on('select', function() {
+                    var attachment = customUploader.state().get('selection').first().toJSON();
+                    $('#input_banner_' + targetIdx).val(attachment.url);
+                    $('#preview_banner_' + targetIdx).attr('src', attachment.url).show();
+                    $('#placeholder_banner_' + targetIdx).hide();
+                }).open();
+            });
+        });
+        </script>
         <?php
     }
 }
